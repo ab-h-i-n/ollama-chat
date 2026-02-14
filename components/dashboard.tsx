@@ -287,10 +287,10 @@ export function Dashboard() {
                   {group.label}
                 </div>
                 {group.chats.map((chat) => (
-                  <button
+                  <div
                     key={chat.id}
                     onClick={() => setActiveChatId(chat.id)}
-                    className={`group w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-left transition-colors ${
+                    className={`group w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-left transition-colors cursor-pointer ${
                       chat.id === activeChatId
                         ? "bg-[#2a2a2a] text-[var(--text-primary)]"
                         : "text-[var(--text-secondary)] hover:bg-[#2a2a2a] hover:text-[var(--text-primary)]"
@@ -307,7 +307,7 @@ export function Dashboard() {
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                  </button>
+                  </div>
                 ))}
               </div>
             ))}

@@ -304,8 +304,12 @@ export function ChatInterface({
           <div className="h-full flex flex-col items-center justify-center px-4">
             {disabled ? (
               <div className="text-center">
-                <div className="w-16 h-16 rounded-full bg-[var(--input-bg)] flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="w-8 h-8 text-[var(--text-muted)]" />
+                <div className="w-16 h-16 rounded-full bg-[var(--input-bg)] flex items-center justify-center mx-auto mb-4 overflow-hidden">
+                  <img
+                    src="/ai-avatar.png"
+                    alt="AI"
+                    className="w-10 h-10 object-contain opacity-50"
+                  />
                 </div>
                 <p className="text-[var(--text-muted)] text-sm">
                   Start the server to begin chatting
@@ -328,14 +332,20 @@ export function ChatInterface({
                 <div className="flex items-start gap-4">
                   <div className="flex-shrink-0 mt-0.5">
                     {m.role === "assistant" ? (
-                      <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center">
-                        <Sparkles className="w-4 h-4 text-white" />
+                      <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center overflow-hidden">
+                        <img
+                          src="/ai-avatar.png"
+                          alt="AI"
+                          className="w-5 h-5 object-contain"
+                        />
                       </div>
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-[#565869] flex items-center justify-center">
-                        <span className="text-xs font-semibold text-white">
-                          U
-                        </span>
+                      <div className="w-8 h-8 rounded-full bg-[#565869] flex items-center justify-center overflow-hidden">
+                        <img
+                          src="/public-avatar.png"
+                          alt="You"
+                          className="w-full h-full object-cover"
+                        />
                       </div>
                     )}
                   </div>
@@ -382,8 +392,12 @@ export function ChatInterface({
               <div className="message-animate">
                 <div className="flex items-start gap-4">
                   <div className="flex-shrink-0 mt-0.5">
-                    <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center">
-                      <Sparkles className="w-4 h-4 text-white" />
+                    <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center overflow-hidden">
+                      <img
+                        src="/ai-avatar.png"
+                        alt="AI"
+                        className="w-5 h-5 object-contain"
+                      />
                     </div>
                   </div>
                   <div className="flex-1 pt-0.5">

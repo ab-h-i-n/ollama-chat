@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Chat",
-  description: "Chat with your AI powered by Ollama on EC2",
+  title: "My AI",
+  description: "Your personal AI assistant",
+  icons: {
+    icon: "/icon.png",
+  },
 };
 
 export default function RootLayout({
