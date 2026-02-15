@@ -7,6 +7,8 @@ export type InstanceStatus = {
   state: "pending" | "running" | "shutting-down" | "terminated" | "stopping" | "stopped" | "unknown";
   publicIp: string | null;
   modelName: string;
+  cloudModelName: string | null;
+  hasCloudModel: boolean;
 };
 
 export async function toggleInstance(action: "start" | "stop", password: string) {
@@ -30,18 +32,24 @@ export async function toggleInstance(action: "start" | "stop", password: string)
 
 export async function checkStatus(): Promise<InstanceStatus> {
   const modelName = process.env.OLLAMA_MODEL || "dolphin-llama3:8b";
+  const hasCloudModel = !!process.env.HF_TOKEN;
+  const cloudModelName = hasCloudModel ? "Kimi-K2.5" : null;
+
   try {
     const status = await getInstanceStatus();
     if (typeof status === "string") {
-      return { state: "unknown", publicIp: null, modelName };
+      return { state: "unknown", publicIp: null, modelName, cloudModelName, hasCloudModel };
     }
     return {
       state: (status.state as InstanceStatus["state"]) || "unknown",
       publicIp: status.publicIp,
       modelName,
+      cloudModelName,
+      hasCloudModel,
     };
   } catch (error) {
     console.error("Failed to check status:", error);
-    return { state: "unknown", publicIp: null, modelName };
+    return { state: "unknown", publicIp: null, modelName, cloudModelName, hasCloudModel };
   }
 }
+

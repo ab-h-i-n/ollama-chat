@@ -16,7 +16,12 @@ import {
   Trash2,
   Menu,
   Loader2,
+  ChevronDown,
+  Cloud,
+  Server,
 } from "lucide-react";
+
+export type ModelProvider = "local" | "cloud";
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -67,6 +72,8 @@ export function Dashboard() {
   const prevStateRef = useRef<string | null>(null);
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [provider, setProvider] = useState<ModelProvider>("cloud");
+  const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
 
   // Set initial sidebar state based on screen size after mount
   useEffect(() => {
@@ -163,7 +170,13 @@ export function Dashboard() {
   };
 
   const isRunning = status?.state === "running";
-  const chatDisabled = !isRunning || ollamaCountdown > 0;
+  const chatDisabled =
+    provider === "local" ? !isRunning || ollamaCountdown > 0 : false;
+
+  const currentModelName =
+    provider === "cloud"
+      ? status?.cloudModelName || "Kimi-K2.5"
+      : status?.modelName || "Local Model";
 
   // Active chat
   const activeChat = chats.find((c) => c.id === activeChatId) || null;
@@ -200,7 +213,7 @@ export function Dashboard() {
       const res = await fetch("/api/title", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: firstUserMsg.content }),
+        body: JSON.stringify({ message: firstUserMsg.content, provider }),
       });
       const data = await res.json();
       if (data.title) {
@@ -226,7 +239,7 @@ export function Dashboard() {
         ),
       );
     }
-  }, [activeChatId, chats]);
+  }, [activeChatId, chats, provider]);
 
   // New chat
   const handleNewChat = () => {
@@ -419,14 +432,93 @@ export function Dashboard() {
             </div>
           )}
           <div className="flex-1" />
-          <div className="flex flex-col items-center">
-            <span className="text-sm font-medium text-[var(--text-primary)]">
-              My AI
-            </span>
-            {status?.modelName && (
-              <span className="text-[10px] text-[var(--text-muted)]">
-                {status.modelName}
-              </span>
+          {/* Model selector dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setProviderDropdownOpen(!providerDropdownOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-[var(--input-bg)] transition-colors"
+            >
+              {provider === "cloud" ? (
+                <Cloud className="w-3.5 h-3.5 text-[var(--accent)]" />
+              ) : (
+                <Server className="w-3.5 h-3.5 text-[var(--accent)]" />
+              )}
+              <div className="flex flex-col items-start">
+                <span className="text-sm font-medium text-[var(--text-primary)] leading-tight">
+                  My AI
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] leading-tight">
+                  {currentModelName}
+                </span>
+              </div>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-[var(--text-muted)] transition-transform duration-200 ${providerDropdownOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {providerDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setProviderDropdownOpen(false)}
+                />
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-52 rounded-xl border border-[var(--border-color)] bg-[#2a2a2a] shadow-xl z-50 overflow-hidden">
+                  <div className="p-1">
+                    <button
+                      onClick={() => {
+                        setProvider("cloud");
+                        setProviderDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                        provider === "cloud"
+                          ? "bg-[var(--accent)]/10 text-[var(--text-primary)]"
+                          : "text-[var(--text-secondary)] hover:bg-[#333]"
+                      }`}
+                    >
+                      <Cloud
+                        className={`w-4 h-4 flex-shrink-0 ${provider === "cloud" ? "text-[var(--accent)]" : ""}`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {status?.cloudModelName || "Kimi-K2.5"}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">
+                          Cloud · HuggingFace
+                        </div>
+                      </div>
+                      {provider === "cloud" && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setProvider("local");
+                        setProviderDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                        provider === "local"
+                          ? "bg-[var(--accent)]/10 text-[var(--text-primary)]"
+                          : "text-[var(--text-secondary)] hover:bg-[#333]"
+                      }`}
+                    >
+                      <Server
+                        className={`w-4 h-4 flex-shrink-0 ${provider === "local" ? "text-[var(--accent)]" : ""}`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {status?.modelName || "Local Model"}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">
+                          Local · EC2 Ollama
+                        </div>
+                      </div>
+                      {provider === "local" && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
           <div className="flex-1" />
@@ -450,7 +542,8 @@ export function Dashboard() {
             messages={activeChat.messages}
             setMessages={setActiveMessages}
             onResponseComplete={handleResponseComplete}
-            modelName={status?.modelName}
+            modelName={currentModelName}
+            provider={provider}
           />
         )}
       </div>

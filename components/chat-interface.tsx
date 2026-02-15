@@ -7,6 +7,8 @@ import {
   ChevronDown,
   Check,
   Copy,
+  ImagePlus,
+  X,
 } from "lucide-react";
 import { useState, useRef, useEffect, FormEvent, useCallback } from "react";
 
@@ -14,6 +16,7 @@ export type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  images?: string[]; // base64 data URLs
 };
 
 // Parse <think>...</think> blocks from model output
@@ -310,12 +313,15 @@ function MessageContent({ text }: { text: string }) {
   );
 }
 
+import type { ModelProvider } from "@/components/dashboard";
+
 interface ChatInterfaceProps {
   disabled?: boolean;
   messages: Message[];
   setMessages: (msgs: Message[] | ((prev: Message[]) => Message[])) => void;
   onResponseComplete?: () => void;
   modelName?: string;
+  provider?: ModelProvider;
 }
 
 export function ChatInterface({
@@ -324,12 +330,15 @@ export function ChatInterface({
   setMessages,
   onResponseComplete,
   modelName,
+  provider = "local",
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -370,18 +379,72 @@ export function ChatInterface({
     return () => vv.removeEventListener("resize", handleResize);
   }, []);
 
+  // Convert file to base64 data URL
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (files: FileList | File[]) => {
+    const imageFiles = Array.from(files).filter((f) =>
+      f.type.startsWith("image/"),
+    );
+    if (imageFiles.length === 0) return;
+
+    const newImages: string[] = [];
+    for (const file of imageFiles) {
+      // Limit to 4 images total
+      if (pendingImages.length + newImages.length >= 4) break;
+      const base64 = await fileToBase64(file);
+      newImages.push(base64);
+    }
+    setPendingImages((prev) => [...prev, ...newImages].slice(0, 4));
+  };
+
+  const removePendingImage = (index: number) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Handle paste for images
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      if (provider !== "cloud") return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      const imageFiles: File[] = [];
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        handleImageUpload(imageFiles);
+      }
+    },
+    [provider, pendingImages.length],
+  );
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading || disabled) return;
+    const hasContent = input.trim() || pendingImages.length > 0;
+    if (!hasContent || isLoading || disabled) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content: input,
+      images: pendingImages.length > 0 ? [...pendingImages] : undefined,
     };
 
     setMessages((prev: Message[]) => [...prev, userMessage]);
     setInput("");
+    setPendingImages([]);
     setIsLoading(true);
     setError(null);
 
@@ -397,7 +460,9 @@ export function ChatInterface({
           messages: [...messages, userMessage].map((m) => ({
             role: m.role,
             content: m.content,
+            images: m.images,
           })),
+          provider,
         }),
       });
 
@@ -436,7 +501,7 @@ export function ChatInterface({
       onResponseComplete?.();
     } catch (err) {
       console.error(err);
-      setError("Failed to send message. Ensure EC2 is running.");
+      setError("Failed to send message.");
     } finally {
       setIsLoading(false);
     }
@@ -532,9 +597,29 @@ export function ChatInterface({
                         );
                       })()}
                     {m.role === "user" && (
-                      <div className="text-sm sm:text-[15px] leading-6 sm:leading-7 text-[var(--text-primary)] whitespace-pre-wrap break-words">
-                        <MessageContent text={m.content} />
-                      </div>
+                      <>
+                        {m.images && m.images.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {m.images.map((img, idx) => (
+                              <div
+                                key={idx}
+                                className="relative rounded-xl overflow-hidden border border-[var(--border-color)] max-w-[200px]"
+                              >
+                                <img
+                                  src={img}
+                                  alt={`Upload ${idx + 1}`}
+                                  className="w-full h-auto max-h-[200px] object-cover"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {m.content && (
+                          <div className="text-sm sm:text-[15px] leading-6 sm:leading-7 text-[var(--text-primary)] whitespace-pre-wrap break-words">
+                            <MessageContent text={m.content} />
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -589,18 +674,93 @@ export function ChatInterface({
       <div className="flex-shrink-0 px-3 sm:px-4 pb-3 sm:pb-4 pt-2">
         <div className="max-w-3xl mx-auto">
           <form onSubmit={handleSubmit}>
+            {/* Image preview strip */}
+            {pendingImages.length > 0 && (
+              <div className="flex gap-2 mb-2 px-2">
+                {pendingImages.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="relative group rounded-xl overflow-hidden border border-[var(--border-color)] bg-[#1a1a1a]"
+                  >
+                    <img
+                      src={img}
+                      alt={`Upload ${idx + 1}`}
+                      className="w-16 h-16 sm:w-20 sm:h-20 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePendingImage(idx)}
+                      className="absolute top-1 right-1 p-0.5 rounded-full bg-black/70 text-white hover:bg-red-500 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div
               className="input-glow relative flex items-end rounded-3xl border border-[var(--border-color)] transition-colors"
               style={{ background: "var(--input-bg)" }}
+              onDragOver={(e) => {
+                if (provider === "cloud") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+              onDrop={(e) => {
+                if (provider !== "cloud") return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer.files.length > 0) {
+                  handleImageUpload(e.dataTransfer.files);
+                }
+              }}
             >
+              {/* Image upload button - only for cloud provider */}
+              {provider === "cloud" && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        handleImageUpload(e.target.files);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={
+                      isLoading || disabled || pendingImages.length >= 4
+                    }
+                    className={`flex-shrink-0 p-2.5 sm:p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors ${
+                      pendingImages.length >= 4
+                        ? "opacity-30 cursor-not-allowed"
+                        : ""
+                    }`}
+                    title="Upload image (max 4)"
+                  >
+                    <ImagePlus className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+
               <textarea
                 ref={textareaRef}
-                className="flex-1 resize-none bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm sm:text-[15px] py-3 sm:py-3.5 pl-4 sm:pl-5 pr-12 sm:pr-14 outline-none max-h-[200px] leading-6"
+                className={`flex-1 resize-none bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm sm:text-[15px] py-3 sm:py-3.5 ${
+                  provider === "cloud" ? "pl-0" : "pl-4 sm:pl-5"
+                } pr-12 sm:pr-14 outline-none max-h-[200px] leading-6`}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 onFocus={(e) => {
-                  // On mobile, scroll input into view when keyboard appears
                   setTimeout(() => {
                     e.target.scrollIntoView({
                       behavior: "smooth",
@@ -611,16 +771,24 @@ export function ChatInterface({
                 placeholder={
                   disabled
                     ? "Start server to chat..."
-                    : `Message ${modelName || "My AI"}`
+                    : provider === "cloud"
+                      ? `Message ${modelName || "My AI"} (paste or attach images)`
+                      : `Message ${modelName || "My AI"}`
                 }
                 disabled={isLoading || disabled}
                 rows={1}
               />
               <button
                 type="submit"
-                disabled={isLoading || !input.trim() || disabled}
+                disabled={
+                  isLoading ||
+                  (!input.trim() && pendingImages.length === 0) ||
+                  disabled
+                }
                 className={`absolute right-2.5 bottom-2.5 p-1.5 rounded-full transition-all ${
-                  input.trim() && !isLoading && !disabled
+                  (input.trim() || pendingImages.length > 0) &&
+                  !isLoading &&
+                  !disabled
                     ? "bg-[var(--send-bg)] text-[var(--send-text)] hover:opacity-80"
                     : "bg-[#676767] text-[#3d3d3d] cursor-not-allowed"
                 }`}
