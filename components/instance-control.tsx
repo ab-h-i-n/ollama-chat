@@ -107,6 +107,14 @@ export function InstanceControl({
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onFocus={(e) => {
+              setTimeout(() => {
+                e.target.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+              }, 300);
+            }}
             placeholder="Password"
             autoFocus
             className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-[#2a2a2a] border border-[var(--border-color)] text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none focus:border-[var(--accent)] transition-colors"

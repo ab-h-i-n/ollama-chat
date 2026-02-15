@@ -365,7 +365,7 @@ export function Dashboard() {
                     </span>
                     <button
                       onClick={(e) => handleDeleteChat(chat.id, e)}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 text-[var(--text-muted)] hover:text-red-400 transition-all"
+                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-0.5 text-[var(--text-muted)] hover:text-red-400 transition-all"
                       title="Delete chat"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

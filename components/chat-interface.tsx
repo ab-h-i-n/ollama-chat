@@ -348,6 +348,28 @@ export function ChatInterface({
     }
   }, [input]);
 
+  // Scroll focused input into view when mobile keyboard opens
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const handleResize = () => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === "TEXTAREA" || activeEl.tagName === "INPUT")
+      ) {
+        // Small delay to let the browser finish layout adjustments
+        setTimeout(() => {
+          activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 100);
+      }
+    };
+
+    vv.addEventListener("resize", handleResize);
+    return () => vv.removeEventListener("resize", handleResize);
+  }, []);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading || disabled) return;
@@ -577,6 +599,15 @@ export function ChatInterface({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onFocus={(e) => {
+                  // On mobile, scroll input into view when keyboard appears
+                  setTimeout(() => {
+                    e.target.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    });
+                  }, 300);
+                }}
                 placeholder={
                   disabled
                     ? "Start server to chat..."
