@@ -499,13 +499,53 @@ export function ChatInterface({
     return () => vv.removeEventListener("resize", handleResize);
   }, []);
 
-  // Convert file to base64 data URL
-  const fileToBase64 = (file: File): Promise<string> => {
+  // Compress and resize image before converting to base64
+  const compressImage = (
+    file: File,
+    maxSize = 1024,
+    quality = 0.7,
+  ): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+
+        let { width, height } = img;
+
+        // Only resize if larger than maxSize
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          } else {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Failed to get canvas context"));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve(dataUrl);
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Failed to load image"));
+      };
+
+      img.src = url;
     });
   };
 
@@ -519,7 +559,7 @@ export function ChatInterface({
     for (const file of imageFiles) {
       // Limit to 4 images total
       if (pendingImages.length + newImages.length >= 4) break;
-      const base64 = await fileToBase64(file);
+      const base64 = await compressImage(file);
       newImages.push(base64);
     }
     setPendingImages((prev) => [...prev, ...newImages].slice(0, 4));
