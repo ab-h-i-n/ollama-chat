@@ -167,11 +167,92 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
   });
 }
 
-// Render a block of non-code text with headings, lists, bold, inline code
+// Check if a line is a markdown table row
+function isTableRow(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.includes("|")
+  );
+}
+
+// Check if a line is a table separator (|---|---|)
+function isTableSeparator(line: string): boolean {
+  return /^\|[\s\-:|]+\|$/.test(line.trim());
+}
+
+// Parse table cells from a row
+function parseTableCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+// Render a markdown table
+function MarkdownTable({
+  rows,
+  startKey,
+}: {
+  rows: string[];
+  startKey: number;
+}) {
+  // Find separator to distinguish header from body
+  const sepIndex = rows.findIndex((r) => isTableSeparator(r));
+  const headerRows = sepIndex > 0 ? rows.slice(0, sepIndex) : [];
+  const bodyRows = sepIndex >= 0 ? rows.slice(sepIndex + 1) : rows;
+
+  return (
+    <div className="my-3 overflow-x-auto rounded-xl border border-[var(--border-color)]">
+      <table className="w-full text-sm text-left">
+        {headerRows.length > 0 && (
+          <thead>
+            {headerRows.map((row, i) => (
+              <tr
+                key={`h-${startKey}-${i}`}
+                className="bg-[#1a1a1a] border-b border-[var(--border-color)]"
+              >
+                {parseTableCells(row).map((cell, ci) => (
+                  <th
+                    key={ci}
+                    className="px-4 py-2.5 font-semibold text-[var(--text-primary)] whitespace-nowrap"
+                  >
+                    {renderInlineMarkdown(cell)}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+        )}
+        <tbody>
+          {bodyRows.map((row, i) => (
+            <tr
+              key={`b-${startKey}-${i}`}
+              className={`border-b border-[var(--border-color)] last:border-b-0 ${
+                i % 2 === 0 ? "bg-[#212121]" : "bg-[#1e1e1e]"
+              }`}
+            >
+              {parseTableCells(row).map((cell, ci) => (
+                <td key={ci} className="px-4 py-2 text-[var(--text-secondary)]">
+                  {renderInlineMarkdown(cell)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Render a block of non-code text with headings, lists, tables, bold, inline code
 function MarkdownBlock({ text }: { text: string }) {
   const lines = text.split("\n");
   const elements: React.ReactNode[] = [];
   let listBuffer: { type: "ul" | "ol"; items: React.ReactNode[] } | null = null;
+  let tableBuffer: string[] = [];
+  let tableStartLine = 0;
 
   const flushList = () => {
     if (!listBuffer) return;
@@ -197,8 +278,32 @@ function MarkdownBlock({ text }: { text: string }) {
     listBuffer = null;
   };
 
+  const flushTable = () => {
+    if (tableBuffer.length === 0) return;
+    elements.push(
+      <MarkdownTable
+        key={`table-${tableStartLine}`}
+        rows={tableBuffer}
+        startKey={tableStartLine}
+      />,
+    );
+    tableBuffer = [];
+  };
+
   for (let j = 0; j < lines.length; j++) {
     const line = lines[j];
+
+    // Table rows
+    if (isTableRow(line)) {
+      flushList();
+      if (tableBuffer.length === 0) {
+        tableStartLine = j;
+      }
+      tableBuffer.push(line);
+      continue;
+    } else if (tableBuffer.length > 0) {
+      flushTable();
+    }
 
     // Headings: ### > ## > #
     const h3Match = line.match(/^###\s+(.+)/);
@@ -285,6 +390,7 @@ function MarkdownBlock({ text }: { text: string }) {
     );
   }
   flushList();
+  flushTable();
 
   return <>{elements}</>;
 }
@@ -739,7 +845,7 @@ export function ChatInterface({
                     disabled={
                       isLoading || disabled || pendingImages.length >= 4
                     }
-                    className={`flex-shrink-0 p-2.5 sm:p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors ${
+                    className={`flex-shrink-0 self-center p-2.5 sm:p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors ${
                       pendingImages.length >= 4
                         ? "opacity-30 cursor-not-allowed"
                         : ""
@@ -771,9 +877,7 @@ export function ChatInterface({
                 placeholder={
                   disabled
                     ? "Start server to chat..."
-                    : provider === "cloud"
-                      ? `Message ${modelName || "My AI"} (paste or attach images)`
-                      : `Message ${modelName || "My AI"}`
+                    : `Message ${modelName || "My AI"}`
                 }
                 disabled={isLoading || disabled}
                 rows={1}
