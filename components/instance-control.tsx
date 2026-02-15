@@ -89,13 +89,6 @@ export function InstanceControl({
         </button>
       </div>
 
-      {/* IP */}
-      {status.publicIp && (
-        <div className="px-2 text-[10px] text-[var(--text-muted)] font-mono">
-          {status.publicIp}
-        </div>
-      )}
-
       {/* Password prompt */}
       {showPasswordPrompt ? (
         <form onSubmit={handleSubmitPassword} className="space-y-2 px-1">

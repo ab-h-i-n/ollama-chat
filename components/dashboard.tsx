@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   toggleInstance,
   checkStatus,
@@ -14,7 +14,22 @@ import {
   PanelLeft,
   MessageSquare,
   Trash2,
+  Menu,
+  Loader2,
 } from "lucide-react";
+
+const MOBILE_BREAKPOINT = 768;
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
 
 type Chat = {
   id: string;
@@ -48,7 +63,15 @@ export function Dashboard() {
   const [status, setStatus] = useState<InstanceStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [polling, setPolling] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [ollamaCountdown, setOllamaCountdown] = useState(0);
+  const prevStateRef = useRef<string | null>(null);
+  const isMobile = useIsMobile();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Set initial sidebar state based on screen size after mount
+  useEffect(() => {
+    setSidebarOpen(window.innerWidth >= MOBILE_BREAKPOINT);
+  }, []);
 
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -97,9 +120,28 @@ export function Dashboard() {
       } else {
         setPolling(true);
       }
+
+      // Detect transition to running → start Ollama countdown
+      if (
+        s.state === "running" &&
+        prevStateRef.current !== null &&
+        prevStateRef.current !== "running"
+      ) {
+        setOllamaCountdown(30);
+      }
+      prevStateRef.current = s.state;
     }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Ollama countdown timer
+  useEffect(() => {
+    if (ollamaCountdown <= 0) return;
+    const timer = setTimeout(() => {
+      setOllamaCountdown((prev) => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [ollamaCountdown]);
 
   const handleToggle = async (password: string) => {
     if (!status) return { success: false, error: "No status" };
@@ -121,6 +163,7 @@ export function Dashboard() {
   };
 
   const isRunning = status?.state === "running";
+  const chatDisabled = !isRunning || ollamaCountdown > 0;
 
   // Active chat
   const activeChat = chats.find((c) => c.id === activeChatId) || null;
@@ -251,14 +294,28 @@ export function Dashboard() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
+      {/* Mobile backdrop */}
+      {isMobile && sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 transition-opacity duration-300"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <div
         className={`${
-          sidebarOpen ? "w-[260px]" : "w-0"
-        } flex-shrink-0 transition-all duration-300 overflow-hidden`}
+          isMobile
+            ? `fixed inset-y-0 left-0 z-50 w-[280px] transition-transform duration-300 ease-in-out ${
+                sidebarOpen ? "translate-x-0" : "-translate-x-full"
+              }`
+            : `${sidebarOpen ? "w-[260px]" : "w-0"} flex-shrink-0 transition-all duration-300 overflow-hidden`
+        }`}
       >
         <div
-          className="flex flex-col h-full w-[260px] p-2"
+          className={`flex flex-col h-full ${
+            isMobile ? "w-[280px]" : "w-[260px]"
+          } p-2`}
           style={{ background: "var(--sidebar-bg)" }}
         >
           {/* Top area */}
@@ -271,7 +328,10 @@ export function Dashboard() {
               <PanelLeftClose className="w-5 h-5" />
             </button>
             <button
-              onClick={handleNewChat}
+              onClick={() => {
+                handleNewChat();
+                if (isMobile) setSidebarOpen(false);
+              }}
               className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[#2a2a2a] transition-colors"
               title="New chat"
             >
@@ -289,7 +349,10 @@ export function Dashboard() {
                 {group.chats.map((chat) => (
                   <div
                     key={chat.id}
-                    onClick={() => setActiveChatId(chat.id)}
+                    onClick={() => {
+                      setActiveChatId(chat.id);
+                      if (isMobile) setSidebarOpen(false);
+                    }}
                     className={`group w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-left transition-colors cursor-pointer ${
                       chat.id === activeChatId
                         ? "bg-[#2a2a2a] text-[var(--text-primary)]"
@@ -333,14 +396,18 @@ export function Dashboard() {
       >
         {/* Top bar */}
         <div className="flex items-center h-12 px-3 flex-shrink-0">
-          {!sidebarOpen && (
+          {(isMobile || !sidebarOpen) && (
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--input-bg)] transition-colors"
                 title="Open sidebar"
               >
-                <PanelLeft className="w-5 h-5" />
+                {isMobile ? (
+                  <Menu className="w-5 h-5" />
+                ) : (
+                  <PanelLeft className="w-5 h-5" />
+                )}
               </button>
               <button
                 onClick={handleNewChat}
@@ -365,11 +432,21 @@ export function Dashboard() {
           <div className="flex-1" />
         </div>
 
+        {/* Ollama countdown banner */}
+        {ollamaCountdown > 0 && (
+          <div className="flex-shrink-0 flex items-center justify-center gap-2 py-2 px-4 bg-[#2a2a2a] border-b border-[var(--border-color)]">
+            <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />
+            <span className="text-sm text-[var(--text-secondary)]">
+              Waiting for Ollama to start... ({ollamaCountdown}s)
+            </span>
+          </div>
+        )}
+
         {/* Chat */}
         {activeChat && (
           <ChatInterface
             key={activeChat.id}
-            disabled={!isRunning}
+            disabled={chatDisabled}
             messages={activeChat.messages}
             setMessages={setActiveMessages}
             onResponseComplete={handleResponseComplete}

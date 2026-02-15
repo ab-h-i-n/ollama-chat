@@ -110,3 +110,14 @@ body {
 .sidebar-item:hover {
   background-color: #2a2a2a;
 }
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  html, body {
+    height: 100dvh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0px;
+  }
+}

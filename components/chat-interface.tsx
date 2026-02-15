@@ -136,7 +136,157 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
   );
 }
 
-// Render message content with code blocks and inline code
+// Render inline markdown: **bold** and `inline code`
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  // Split on **bold** and `inline code`
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return parts.map((part, i) => {
+    const boldMatch = part.match(/^\*\*([^*]+)\*\*$/);
+    if (boldMatch) {
+      return (
+        <strong key={i} className="font-semibold text-[var(--text-primary)]">
+          {boldMatch[1]}
+        </strong>
+      );
+    }
+    const inlineMatch = part.match(/^`([^`]+)`$/);
+    if (inlineMatch) {
+      return (
+        <code
+          key={i}
+          className="px-1.5 py-0.5 rounded-md bg-[#1a1a1a] text-[#e6e6e6] text-[13px] font-mono border border-[var(--border-color)]"
+        >
+          {inlineMatch[1]}
+        </code>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+// Render a block of non-code text with headings, lists, bold, inline code
+function MarkdownBlock({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let listBuffer: { type: "ul" | "ol"; items: React.ReactNode[] } | null = null;
+
+  const flushList = () => {
+    if (!listBuffer) return;
+    if (listBuffer.type === "ul") {
+      elements.push(
+        <ul
+          key={`list-${elements.length}`}
+          className="my-1.5 pl-5 space-y-1 list-disc text-[var(--text-primary)]"
+        >
+          {listBuffer.items}
+        </ul>,
+      );
+    } else {
+      elements.push(
+        <ol
+          key={`list-${elements.length}`}
+          className="my-1.5 pl-5 space-y-1 list-decimal text-[var(--text-primary)]"
+        >
+          {listBuffer.items}
+        </ol>,
+      );
+    }
+    listBuffer = null;
+  };
+
+  for (let j = 0; j < lines.length; j++) {
+    const line = lines[j];
+
+    // Headings: ### > ## > #
+    const h3Match = line.match(/^###\s+(.+)/);
+    if (h3Match) {
+      flushList();
+      elements.push(
+        <h3
+          key={j}
+          className="text-lg font-bold text-[var(--text-primary)] mt-4 mb-1.5"
+        >
+          {renderInlineMarkdown(h3Match[1])}
+        </h3>,
+      );
+      continue;
+    }
+    const h2Match = line.match(/^##\s+(.+)/);
+    if (h2Match) {
+      flushList();
+      elements.push(
+        <h2
+          key={j}
+          className="text-xl font-bold text-[var(--text-primary)] mt-5 mb-2"
+        >
+          {renderInlineMarkdown(h2Match[1])}
+        </h2>,
+      );
+      continue;
+    }
+    const h1Match = line.match(/^#\s+(.+)/);
+    if (h1Match) {
+      flushList();
+      elements.push(
+        <h1
+          key={j}
+          className="text-2xl font-bold text-[var(--text-primary)] mt-5 mb-2"
+        >
+          {renderInlineMarkdown(h1Match[1])}
+        </h1>,
+      );
+      continue;
+    }
+
+    // Unordered list item: - text or * text
+    const ulMatch = line.match(/^\s*[-*]\s+(.+)/);
+    if (ulMatch) {
+      if (!listBuffer || listBuffer.type !== "ul") {
+        flushList();
+        listBuffer = { type: "ul", items: [] };
+      }
+      listBuffer.items.push(
+        <li key={j}>{renderInlineMarkdown(ulMatch[1])}</li>,
+      );
+      continue;
+    }
+
+    // Ordered list item: 1. text
+    const olMatch = line.match(/^\s*\d+\.\s+(.+)/);
+    if (olMatch) {
+      if (!listBuffer || listBuffer.type !== "ol") {
+        flushList();
+        listBuffer = { type: "ol", items: [] };
+      }
+      listBuffer.items.push(
+        <li key={j}>{renderInlineMarkdown(olMatch[1])}</li>,
+      );
+      continue;
+    }
+
+    // Regular line — flush any pending list
+    flushList();
+
+    // Empty line → spacing
+    if (line.trim() === "") {
+      elements.push(<br key={j} />);
+      continue;
+    }
+
+    // Normal paragraph line
+    elements.push(
+      <span key={j}>
+        {renderInlineMarkdown(line)}
+        {j < lines.length - 1 ? "\n" : ""}
+      </span>,
+    );
+  }
+  flushList();
+
+  return <>{elements}</>;
+}
+
+// Render message content with code blocks and markdown
 function MessageContent({ text }: { text: string }) {
   if (!text) return null;
 
@@ -154,26 +304,7 @@ function MessageContent({ text }: { text: string }) {
           return <CodeBlock key={i} code={code} language={language} />;
         }
 
-        // Handle inline code and regular text
-        const inlineParts = part.split(/(`[^`]+`)/g);
-        return (
-          <span key={i}>
-            {inlineParts.map((inline, j) => {
-              const inlineMatch = inline.match(/^`([^`]+)`$/);
-              if (inlineMatch) {
-                return (
-                  <code
-                    key={j}
-                    className="px-1.5 py-0.5 rounded-md bg-[#1a1a1a] text-[#e6e6e6] text-[13px] font-mono border border-[var(--border-color)]"
-                  >
-                    {inlineMatch[1]}
-                  </code>
-                );
-              }
-              return <span key={j}>{inline}</span>;
-            })}
-          </span>
-        );
+        return <MarkdownBlock key={i} text={part} />;
       })}
     </>
   );
@@ -326,13 +457,13 @@ export function ChatInterface({
         )}
 
         {messages.length > 0 && (
-          <div className="max-w-3xl mx-auto px-4 py-4 space-y-6">
+          <div className="max-w-3xl mx-auto px-3 sm:px-4 py-3 sm:py-4 space-y-4 sm:space-y-6">
             {messages.map((m) => (
               <div key={m.id} className="message-animate">
-                <div className="flex items-start gap-4">
+                <div className="flex items-start gap-2.5 sm:gap-4">
                   <div className="flex-shrink-0 mt-0.5">
                     {m.role === "assistant" ? (
-                      <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center overflow-hidden">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[var(--accent)] flex items-center justify-center overflow-hidden">
                         <img
                           src="/ai-avatar.png"
                           alt="AI"
@@ -340,7 +471,7 @@ export function ChatInterface({
                         />
                       </div>
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-[#565869] flex items-center justify-center overflow-hidden">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#565869] flex items-center justify-center overflow-hidden">
                         <img
                           src="/public-avatar.png"
                           alt="You"
@@ -369,7 +500,7 @@ export function ChatInterface({
                                 }
                               />
                             )}
-                            <div className="text-[15px] leading-7 text-[var(--text-primary)] whitespace-pre-wrap break-words">
+                            <div className="text-sm sm:text-[15px] leading-6 sm:leading-7 text-[var(--text-primary)] whitespace-pre-wrap break-words">
                               <MessageContent text={parsed.response} />
                               {isLoading && isLastMsg && !parsed.isThinking && (
                                 <span className="inline-block w-1.5 h-5 bg-[var(--text-secondary)] ml-0.5 align-middle animate-pulse rounded-sm" />
@@ -379,7 +510,7 @@ export function ChatInterface({
                         );
                       })()}
                     {m.role === "user" && (
-                      <div className="text-[15px] leading-7 text-[var(--text-primary)] whitespace-pre-wrap break-words">
+                      <div className="text-sm sm:text-[15px] leading-6 sm:leading-7 text-[var(--text-primary)] whitespace-pre-wrap break-words">
                         <MessageContent text={m.content} />
                       </div>
                     )}
@@ -390,9 +521,9 @@ export function ChatInterface({
 
             {isLoading && messages[messages.length - 1]?.role === "user" && (
               <div className="message-animate">
-                <div className="flex items-start gap-4">
+                <div className="flex items-start gap-2.5 sm:gap-4">
                   <div className="flex-shrink-0 mt-0.5">
-                    <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center overflow-hidden">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[var(--accent)] flex items-center justify-center overflow-hidden">
                       <img
                         src="/ai-avatar.png"
                         alt="AI"
@@ -433,7 +564,7 @@ export function ChatInterface({
       </div>
 
       {/* Input area */}
-      <div className="flex-shrink-0 px-4 pb-4 pt-2">
+      <div className="flex-shrink-0 px-3 sm:px-4 pb-3 sm:pb-4 pt-2">
         <div className="max-w-3xl mx-auto">
           <form onSubmit={handleSubmit}>
             <div
@@ -442,7 +573,7 @@ export function ChatInterface({
             >
               <textarea
                 ref={textareaRef}
-                className="flex-1 resize-none bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] text-[15px] py-3.5 pl-5 pr-14 outline-none max-h-[200px] leading-6"
+                className="flex-1 resize-none bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm sm:text-[15px] py-3 sm:py-3.5 pl-4 sm:pl-5 pr-12 sm:pr-14 outline-none max-h-[200px] leading-6"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
