@@ -293,7 +293,7 @@ export function Dashboard() {
   if (!initialized) return null;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden">
+    <div className="flex h-dvh w-screen overflow-hidden">
       {/* Mobile backdrop */}
       {isMobile && sidebarOpen && (
         <div
