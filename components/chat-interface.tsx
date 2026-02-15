@@ -442,16 +442,30 @@ export function ChatInterface({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const isNearBottomRef = useRef(true);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Track whether user is near the bottom of the scroll area
+  const handleScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const threshold = 150;
+    isNearBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+  }, []);
+
+  // Only auto-scroll if user is near the bottom
   useEffect(() => {
-    scrollToBottom();
+    if (isNearBottomRef.current) {
+      scrollToBottom();
+    }
   }, [messages]);
 
   // Auto-resize textarea
@@ -553,6 +567,7 @@ export function ChatInterface({
     setPendingImages([]);
     setIsLoading(true);
     setError(null);
+    isNearBottomRef.current = true;
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -623,7 +638,11 @@ export function ChatInterface({
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className="flex-1 overflow-y-auto"
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+      >
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center px-4">
             {disabled ? (
