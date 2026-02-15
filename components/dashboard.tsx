@@ -1,12 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  toggleInstance,
-  checkStatus,
-  type InstanceStatus,
-} from "@/app/actions";
-import { InstanceControl } from "@/components/instance-control";
+import { useState, useEffect, useCallback } from "react";
+import { checkStatus, type InstanceStatus } from "@/app/actions";
 import { ChatInterface, type Message } from "@/components/chat-interface";
 import {
   MessageSquarePlus,
@@ -15,7 +10,6 @@ import {
   MessageSquare,
   Trash2,
   Menu,
-  Loader2,
   ChevronDown,
   Cloud,
   Server,
@@ -66,10 +60,6 @@ function saveChats(chats: Chat[]) {
 
 export function Dashboard() {
   const [status, setStatus] = useState<InstanceStatus | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [polling, setPolling] = useState(false);
-  const [ollamaCountdown, setOllamaCountdown] = useState(0);
-  const prevStateRef = useRef<string | null>(null);
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [provider, setProvider] = useState<ModelProvider>("cloud");
@@ -111,67 +101,10 @@ export function Dashboard() {
     }
   }, [chats, initialized]);
 
-  // EC2 status polling
-  const fetchStatus = async () => {
-    const s = await checkStatus();
-    setStatus(s);
-    return s;
-  };
-
+  // Fetch model info on mount
   useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(async () => {
-      const s = await fetchStatus();
-      if (s.state === "running" || s.state === "stopped") {
-        setPolling(false);
-      } else {
-        setPolling(true);
-      }
-
-      // Detect transition to running → start Ollama countdown
-      if (
-        s.state === "running" &&
-        prevStateRef.current !== null &&
-        prevStateRef.current !== "running"
-      ) {
-        setOllamaCountdown(30);
-      }
-      prevStateRef.current = s.state;
-    }, 5000);
-    return () => clearInterval(interval);
+    checkStatus().then(setStatus);
   }, []);
-
-  // Ollama countdown timer
-  useEffect(() => {
-    if (ollamaCountdown <= 0) return;
-    const timer = setTimeout(() => {
-      setOllamaCountdown((prev) => prev - 1);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [ollamaCountdown]);
-
-  const handleToggle = async (password: string) => {
-    if (!status) return { success: false, error: "No status" };
-    setLoading(true);
-    const action = status.state === "running" ? "stop" : "start";
-    try {
-      const result = await toggleInstance(action, password);
-      if (result.success) {
-        setPolling(true);
-        await fetchStatus();
-      }
-      return result;
-    } catch (error) {
-      console.error("Error toggling instance:", error);
-      return { success: false, error: "Failed to toggle instance" };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const isRunning = status?.state === "running";
-  const chatDisabled =
-    provider === "local" ? !isRunning || ollamaCountdown > 0 : false;
 
   const currentModelName =
     provider === "cloud"
@@ -388,17 +321,6 @@ export function Dashboard() {
               </div>
             ))}
           </div>
-
-          {/* Server Controls at bottom */}
-          <div className="border-t border-[var(--border-color)] pt-3 mt-2">
-            <InstanceControl
-              status={status}
-              loading={loading}
-              polling={polling}
-              onToggle={handleToggle}
-              onRefresh={fetchStatus}
-            />
-          </div>
         </div>
       </div>
 
@@ -480,10 +402,10 @@ export function Dashboard() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">
-                          {status?.cloudModelName || "Kimi-K2.5"}
+                          {status?.cloudModelName || "GPT-OSS-120B"}
                         </div>
                         <div className="text-[10px] text-[var(--text-muted)]">
-                          Cloud · HuggingFace
+                          Cloud · NVIDIA
                         </div>
                       </div>
                       {provider === "cloud" && (
@@ -524,21 +446,11 @@ export function Dashboard() {
           <div className="flex-1" />
         </div>
 
-        {/* Ollama countdown banner */}
-        {ollamaCountdown > 0 && (
-          <div className="flex-shrink-0 flex items-center justify-center gap-2 py-2 px-4 bg-[#2a2a2a] border-b border-[var(--border-color)]">
-            <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />
-            <span className="text-sm text-[var(--text-secondary)]">
-              Waiting for Ollama to start... ({ollamaCountdown}s)
-            </span>
-          </div>
-        )}
-
         {/* Chat */}
         {activeChat && (
           <ChatInterface
             key={activeChat.id}
-            disabled={chatDisabled}
+            disabled={false}
             messages={activeChat.messages}
             setMessages={setActiveMessages}
             onResponseComplete={handleResponseComplete}

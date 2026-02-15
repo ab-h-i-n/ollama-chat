@@ -1,16 +1,15 @@
-import { getInstanceStatus } from "@/lib/aws";
 import { OpenAI } from "openai";
 
-const HF_MODEL = "moonshotai/Kimi-K2.5:novita";
+const CLOUD_MODEL = "openai/gpt-oss-120b";
 
 async function generateTitleCloud(message: string): Promise<string> {
   const client = new OpenAI({
-    baseURL: "https://router.huggingface.co/v1",
-    apiKey: process.env.HF_TOKEN,
+    baseURL: "https://integrate.api.nvidia.com/v1",
+    apiKey: process.env.NVIDIA_API_KEY,
   });
 
   const response = await client.chat.completions.create({
-    model: HF_MODEL,
+    model: CLOUD_MODEL,
     messages: [
       {
         role: "user",
@@ -58,21 +57,17 @@ export async function POST(req: Request) {
     let title: string;
 
     if (provider === "cloud") {
-      if (!process.env.HF_TOKEN) {
+      if (!process.env.NVIDIA_API_KEY) {
         return Response.json({ title: message.slice(0, 40) });
       }
       title = await generateTitleCloud(message);
     } else {
-      const status = await getInstanceStatus();
-      if (
-        typeof status === "string" ||
-        status.state !== "running" ||
-        !status.publicIp
-      ) {
+      const publicIp = process.env.EC2_PUBLIC_IP;
+      if (!publicIp) {
         return Response.json({ title: message.slice(0, 40) });
       }
       const model = process.env.OLLAMA_MODEL || "dolphin-llama3:8b";
-      title = await generateTitleLocal(message, status.publicIp, model);
+      title = await generateTitleLocal(message, publicIp, model);
     }
 
     // Clean up and limit length

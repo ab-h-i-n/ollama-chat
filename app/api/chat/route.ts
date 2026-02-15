@@ -1,20 +1,19 @@
-import { getInstanceStatus } from "@/lib/aws";
 import { OpenAI } from "openai";
 
 // Allow streaming responses up to 60 seconds
 export const maxDuration = 60;
 
-const HF_MODEL = "moonshotai/Kimi-K2.5:novita";
+const CLOUD_MODEL = "openai/gpt-oss-120b";
 
-function getHFClient() {
+function getCloudClient() {
   return new OpenAI({
-    baseURL: "https://router.huggingface.co/v1",
-    apiKey: process.env.HF_TOKEN,
+    baseURL: "https://integrate.api.nvidia.com/v1",
+    apiKey: process.env.NVIDIA_API_KEY,
   });
 }
 
 async function handleCloudChat(messages: { role: string; content: string; images?: string[] }[]) {
-  const client = getHFClient();
+  const client = getCloudClient();
 
   // Build messages with multimodal content when images are present
   const formattedMessages = messages.map((m) => {
@@ -53,7 +52,7 @@ async function handleCloudChat(messages: { role: string; content: string; images
   });
 
   const stream = await client.chat.completions.create({
-    model: HF_MODEL,
+    model: CLOUD_MODEL,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages: formattedMessages as any,
     stream: true,
@@ -69,7 +68,7 @@ async function handleCloudChat(messages: { role: string; content: string; images
           }
         }
       } catch (err) {
-        console.error("HF stream error:", err);
+        console.error("Cloud stream error:", err);
         controller.error(err);
       } finally {
         controller.close();
@@ -83,19 +82,15 @@ async function handleCloudChat(messages: { role: string; content: string; images
 }
 
 async function handleLocalChat(messages: { role: string; content: string }[]) {
-  const status = await getInstanceStatus();
+  const publicIp = process.env.EC2_PUBLIC_IP;
 
-  if (
-    typeof status === "string" ||
-    status.state !== "running" ||
-    !status.publicIp
-  ) {
-    return new Response("EC2 instance is not running", { status: 503 });
+  if (!publicIp) {
+    return new Response("EC2_PUBLIC_IP not configured", { status: 503 });
   }
 
   const model = process.env.OLLAMA_MODEL || "dolphin-llama3:8b";
 
-  const response = await fetch(`http://${status.publicIp}:11434/api/chat`, {
+  const response = await fetch(`http://${publicIp}:11434/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -173,8 +168,8 @@ export async function POST(req: Request) {
 
   try {
     if (provider === "cloud") {
-      if (!process.env.HF_TOKEN) {
-        return new Response("HF_TOKEN not configured", { status: 500 });
+      if (!process.env.NVIDIA_API_KEY) {
+        return new Response("NVIDIA_API_KEY not configured", { status: 500 });
       }
       return await handleCloudChat(messages);
     } else {
